@@ -119,4 +119,21 @@ describe("LxSourceManager", () => {
     await expect(m.importScript(unsupported)).rejects.toThrow();
     m.close();
   });
+
+  it("accepts sources that send inited asynchronously after an update check", async () => {
+    const m = manager();
+    const asyncInit = `/**
+      * @name async init source
+      */
+      const { EVENT_NAMES, on, send } = globalThis.lx
+      on(EVENT_NAMES.request, () => Promise.resolve('https://audio.example/a.mp3'))
+      setTimeout(() => send(EVENT_NAMES.inited, { sources: {
+        wy: { type: 'music', actions: ['musicUrl'], qualitys: ['128k'] },
+      } }), 30)`;
+    await expect(m.importScript(asyncInit)).resolves.toMatchObject({
+      name: "async init source",
+      supportedSources: ["wy"],
+    });
+    m.close();
+  });
 });

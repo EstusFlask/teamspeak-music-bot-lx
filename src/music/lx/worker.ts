@@ -10,6 +10,8 @@ type Handler = (data: unknown) => Promise<unknown> | unknown;
 let requestHandler: Handler | undefined;
 let initialized = false;
 let initData: unknown;
+let resolveInit!: (data: unknown) => void;
+const initReady = new Promise<unknown>((resolve) => { resolveInit = resolve; });
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 let nextTimer = 1;
 
@@ -36,6 +38,7 @@ async function init(script: string, scriptInfo: Record<string, unknown>): Promis
       if (eventName === EVENT_NAMES.inited) {
         initialized = true;
         initData = data;
+        resolveInit(data);
       } else if (eventName === EVENT_NAMES.updateAlert) {
         parentPort!.postMessage({ type: "updateAlert", data });
       }
@@ -45,7 +48,13 @@ async function init(script: string, scriptInfo: Record<string, unknown>): Promis
       const controller = { cancelled: false };
       void lxHttpRequest(url, options).then((resp) => {
         if (controller.cancelled) return;
-        const body = resp.body instanceof Uint8Array ? Buffer.from(resp.body) : resp.body;
+        let body: unknown = resp.body instanceof Uint8Array ? Buffer.from(resp.body) : resp.body;
+        if (
+          typeof body === "string" &&
+          (resp.headers["content-type"]?.includes("json") || /^[\s\r\n]*[\[{]/.test(body))
+        ) {
+          try { body = JSON.parse(body); } catch { /* keep the original text */ }
+        }
         callback(null, { ...resp, body }, body);
       }, (err) => {
         if (!controller.cancelled) callback(err instanceof Error ? err : new Error(String(err)));
@@ -107,7 +116,18 @@ async function init(script: string, scriptInfo: Record<string, unknown>): Promis
   });
   const compiled = new vm.Script(`"use strict";\n${script}`, { filename: "lx-source.js" });
   compiled.runInContext(context, { timeout: 3_000 });
-  if (!initialized) throw new Error("音源脚本未发送 inited 事件");
+  // Many real-world sources check their update endpoint first and only send
+  // `inited` from a Promise continuation. Give them time to complete instead
+  // of requiring the event during the synchronous top-level evaluation.
+  if (!initialized) {
+    initData = await Promise.race([
+      initReady,
+      new Promise<never>((_, reject) => setTimeout(
+        () => reject(new Error("音源脚本未发送 inited 事件")),
+        4_500,
+      )),
+    ]);
+  }
   if (!requestHandler) throw new Error("音源脚本未注册 request 处理器");
   parentPort!.postMessage({ type: "inited", data: initData });
 }

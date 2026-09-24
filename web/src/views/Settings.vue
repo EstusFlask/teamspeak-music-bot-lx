@@ -2759,6 +2759,7 @@ onUnmounted(() => {
 .lx-fallback-toggle { padding: 8px 0; border: 0; }
 .lx-import-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .lx-import-row .input { min-width: 260px; }
+.lx-import-row .file-input { display: none; }
 .lx-source-list { display: flex; flex-direction: column; gap: 10px; }
 .lx-source-item {
   display: flex;
