@@ -75,21 +75,24 @@ describe("music router provider gating (enabledProviders) + jellyfin endpoints",
 
   function mount(config: BotConfig) {
     const netease = fakeProvider("netease");
+    const qq = fakeProvider("qq");
+    const bilibili = fakeProvider("bilibili");
+    const kugou = fakeProvider("kugou");
     const jellyfin = jellyfinFake();
     const router = createMusicRouter(
       netease,
-      fakeProvider("qq"),
-      fakeProvider("bilibili"),
+      qq,
+      bilibili,
       pino({ level: "silent" }),
       undefined,
       config,
-      fakeProvider("kugou"),
+      kugou,
       fakeProvider("spotify"),
       jellyfin,
     );
     const app = express();
     app.use("/api/music", router);
-    return { app, netease, jellyfin };
+    return { app, netease, qq, bilibili, kugou, jellyfin };
   }
 
   it("routes a platform-less /search to the default platform (netease)", async () => {
@@ -144,6 +147,17 @@ describe("music router provider gating (enabledProviders) + jellyfin endpoints",
     const res = await request(app).get("/api/music/search?q=hello");
     expect(res.status).toBe(200);
     // Default is now bilibili, so the netease provider must NOT be hit.
+    expect(netease.search).not.toHaveBeenCalled();
+  });
+
+  it("routes the virtual LX default to its configured native metadata provider", async () => {
+    const config = getDefaultConfig();
+    config.lxMusic = { enabled: true, searchProvider: "qq", fallbackToOfficial: true };
+    config.defaultPlatform = "lx";
+    const { app, netease, qq } = mount(config);
+    const res = await request(app).get("/api/music/search?q=hello");
+    expect(res.status).toBe(200);
+    expect(qq.search).toHaveBeenCalledWith("hello", 20, 0);
     expect(netease.search).not.toHaveBeenCalled();
   });
 

@@ -555,6 +555,97 @@
       </div>
     </section>
 
+    <!-- LX Music custom-source scripts. The scripts resolve playback URLs for
+         NetEase/QQ/Kugou; native providers still supply search metadata. -->
+    <section v-if="can('platform.auth')" class="settings-section">
+      <h2 class="section-title">洛雪音乐源</h2>
+      <p class="profile-section-hint">
+        导入兼容洛雪音乐的自定义源脚本，为网易云、QQ、酷狗解析播放地址。第三方脚本可能存在安全风险，请只导入可信来源。
+      </p>
+
+      <div class="account-card lx-card">
+        <div class="account-header">
+          <Icon icon="mdi:snowflake" class="account-icon lx-icon" />
+          <div class="account-info">
+            <div class="account-name">洛雪自定义源</div>
+            <div class="account-status" :class="{ logged: lxSources.length > 0 }">
+              {{ lxSources.length ? `已导入 ${lxSources.length} 个源` : '尚未导入音源' }}
+            </div>
+          </div>
+        </div>
+
+        <template v-if="can('bot.manage')">
+          <label class="profile-toggle behavior-toggle lx-enable-row">
+            <div class="profile-toggle-text">
+              <div class="profile-toggle-label">启用洛雪播放解析</div>
+              <div class="profile-toggle-hint">支持网易云（wy）、QQ（tx）和酷狗（kg）；解析失败时可回退项目自带接口。</div>
+            </div>
+            <input v-model="lxForm.enabled" type="checkbox" class="profile-toggle-switch" />
+          </label>
+          <div class="lx-config-grid">
+            <label class="form-group">
+              <span>默认检索平台</span>
+              <select v-model="lxForm.searchProvider" class="input">
+                <option value="netease">网易云音乐</option>
+                <option value="qq">QQ音乐</option>
+                <option value="kugou">酷狗音乐</option>
+              </select>
+            </label>
+            <label class="profile-toggle lx-fallback-toggle">
+              <div class="profile-toggle-text">
+                <div class="profile-toggle-label">失败时回退官方接口</div>
+                <div class="profile-toggle-hint">建议开启，避免脚本临时失效导致无法播放。</div>
+              </div>
+              <input v-model="lxForm.fallbackToOfficial" type="checkbox" class="profile-toggle-switch" />
+            </label>
+          </div>
+          <button class="btn-primary" :disabled="lxSaving" @click="saveLxConfig">
+            {{ lxSaving ? '保存中…' : '保存洛雪设置' }}
+          </button>
+        </template>
+
+        <div class="lx-import-row">
+          <input v-model="lxImportUrl" class="input" placeholder="粘贴洛雪音源脚本的 HTTP/HTTPS 地址" @keyup.enter="importLxUrl" />
+          <button class="btn-secondary" :disabled="lxBusy || !lxImportUrl.trim()" @click="importLxUrl">在线导入</button>
+          <button class="btn-secondary" :disabled="lxBusy" @click="lxFileInput?.click()">本地导入</button>
+          <input ref="lxFileInput" type="file" accept=".js,text/javascript" class="file-input" @change="importLxFile" />
+        </div>
+
+        <div v-if="lxSources.length" class="lx-source-list">
+          <div v-for="source in lxSources" :key="source.id" class="lx-source-item" :class="{ active: source.id === lxActiveSourceId }">
+            <div class="lx-source-main">
+              <div class="lx-source-title">
+                <span>{{ source.name }}</span>
+                <span v-if="source.version" class="lx-version">v{{ source.version }}</span>
+                <span v-if="source.id === lxActiveSourceId" class="lx-active-badge">当前使用</span>
+              </div>
+              <div v-if="source.description" class="lx-source-desc">{{ source.description }}</div>
+              <div class="lx-source-meta">
+                <span v-if="source.author">{{ source.author }}</span>
+                <span>支持：{{ lxPlatformLabels(source.supportedSources) }}</span>
+                <span>{{ source.importUrl ? '在线源' : '本地源' }}</span>
+              </div>
+              <div v-if="source.updateAlert" class="lx-update-alert">
+                {{ source.updateAlert.log }}
+                <a v-if="source.updateAlert.updateUrl" :href="source.updateAlert.updateUrl" target="_blank" rel="noopener noreferrer">查看更新</a>
+              </div>
+              <label class="perm-check lx-alert-check">
+                <input :checked="source.allowUpdateAlerts" type="checkbox" @change="toggleLxUpdateAlerts(source, ($event.target as HTMLInputElement).checked)" />
+                允许显示更新提示
+              </label>
+            </div>
+            <div class="lx-source-actions">
+              <button v-if="source.id !== lxActiveSourceId" class="btn-secondary" :disabled="lxBusy" @click="activateLxSource(source.id)">选择</button>
+              <button v-if="source.importUrl" class="btn-secondary" :disabled="lxBusy" @click="updateLxSource(source.id)">更新</button>
+              <button class="btn-secondary lx-delete" :disabled="lxBusy" @click="deleteLxSource(source)">删除</button>
+            </div>
+          </div>
+        </div>
+        <div v-else class="lx-empty">可在线导入，也可以选择本地 JavaScript 音源文件。</div>
+        <p v-if="lxMessage" class="spotify-message" :class="`tone-${lxMessageTone}`">{{ lxMessage }}</p>
+      </div>
+    </section>
+
     <!-- Default music source (issue #126): the source used by chat commands
          (!play/!add …) and the WebUI when no platform flag is given. Saving is a
          global bot setting, so gate on bot.manage like the other behavior rows. -->
@@ -1284,6 +1375,7 @@ function providerOn(p: string): boolean {
 // --- Default music source (issue #126) ---
 // Chinese labels for the gateable providers, shown in the default-source select.
 const PROVIDER_LABELS: Record<string, string> = {
+  lx: '洛雪音乐',
   netease: '网易云音乐',
   qq: 'QQ音乐',
   kugou: '酷狗音乐',
@@ -1298,10 +1390,139 @@ const defaultSourceMessage = ref('');
 const defaultSourceMessageTone = ref<'ok' | 'warn'>('ok');
 // Only currently-enabled sources can be picked as the default.
 const defaultSourceOptions = computed(() =>
-  enabledProviders.value
+  [...enabledProviders.value, ...(lxForm.enabled ? ['lx'] : [])]
     .filter((p) => p in PROVIDER_LABELS)
     .map((p) => ({ value: p, label: PROVIDER_LABELS[p] })),
 );
+
+interface LxSourceItem {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  author: string;
+  homepage: string;
+  importUrl?: string;
+  supportedSources: Array<'wy' | 'tx' | 'kg'>;
+  allowUpdateAlerts: boolean;
+  updateAlert?: { log: string; updateUrl?: string };
+}
+
+const lxForm = reactive({ enabled: false, searchProvider: 'netease' as 'netease' | 'qq' | 'kugou', fallbackToOfficial: true });
+const lxSources = ref<LxSourceItem[]>([]);
+const lxActiveSourceId = ref<string | null>(null);
+const lxImportUrl = ref('');
+const lxFileInput = ref<HTMLInputElement | null>(null);
+const lxBusy = ref(false);
+const lxSaving = ref(false);
+const lxMessage = ref('');
+const lxMessageTone = ref<'ok' | 'warn'>('ok');
+
+function applyLxConfig(value: any) {
+  if (!value || typeof value !== 'object') return;
+  lxForm.enabled = Boolean(value.enabled);
+  if (value.searchProvider === 'netease' || value.searchProvider === 'qq' || value.searchProvider === 'kugou') {
+    lxForm.searchProvider = value.searchProvider;
+  }
+  lxForm.fallbackToOfficial = value.fallbackToOfficial !== false;
+}
+
+function applyLxSources(value: any) {
+  lxSources.value = Array.isArray(value?.sources) ? value.sources : [];
+  lxActiveSourceId.value = typeof value?.activeSourceId === 'string' ? value.activeSourceId : null;
+}
+
+function lxPlatformLabels(platforms: string[]): string {
+  const labels: Record<string, string> = { wy: '网易云', tx: 'QQ', kg: '酷狗' };
+  return platforms.map((p) => labels[p] ?? p).join(' / ');
+}
+
+function lxError(err: any): string {
+  return err?.response?.data?.error || err?.message || '操作失败';
+}
+
+async function loadLxSources() {
+  try { applyLxSources((await axios.get('/api/lx-sources')).data); } catch { /* permission/load failure is non-fatal */ }
+}
+
+async function saveLxConfig() {
+  lxSaving.value = true;
+  lxMessage.value = '';
+  try {
+    const res = await axios.post('/api/bot/settings', { lxMusic: { ...lxForm } });
+    applyLxConfig(res.data.lxMusic);
+    defaultPlatformForm.value = res.data.defaultPlatform ?? '';
+    await store.fetchProviders();
+    lxMessageTone.value = 'ok';
+    lxMessage.value = '洛雪设置已保存';
+  } catch (err) {
+    lxMessageTone.value = 'warn';
+    lxMessage.value = lxError(err);
+  } finally { lxSaving.value = false; }
+}
+
+async function importLxUrl() {
+  if (!lxImportUrl.value.trim()) return;
+  lxBusy.value = true;
+  lxMessage.value = '';
+  try {
+    const res = await axios.post('/api/lx-sources/import', { url: lxImportUrl.value.trim() });
+    applyLxSources(res.data);
+    lxImportUrl.value = '';
+    lxMessageTone.value = 'ok';
+    lxMessage.value = `已导入 ${res.data.source?.name ?? '洛雪音源'}`;
+  } catch (err) {
+    lxMessageTone.value = 'warn'; lxMessage.value = lxError(err);
+  } finally { lxBusy.value = false; }
+}
+
+async function importLxFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  lxBusy.value = true;
+  lxMessage.value = '';
+  try {
+    if (file.size > 1024 * 1024) throw new Error('音源脚本不能超过 1 MB');
+    const res = await axios.post('/api/lx-sources/import', { script: await file.text(), fileName: file.name });
+    applyLxSources(res.data);
+    lxMessageTone.value = 'ok'; lxMessage.value = `已导入 ${res.data.source?.name ?? file.name}`;
+  } catch (err) {
+    lxMessageTone.value = 'warn'; lxMessage.value = lxError(err);
+  } finally { lxBusy.value = false; }
+}
+
+async function activateLxSource(id: string) {
+  lxBusy.value = true;
+  try { applyLxSources((await axios.post(`/api/lx-sources/${id}/activate`)).data); }
+  catch (err) { lxMessageTone.value = 'warn'; lxMessage.value = lxError(err); }
+  finally { lxBusy.value = false; }
+}
+
+async function updateLxSource(id: string) {
+  lxBusy.value = true;
+  lxMessage.value = '';
+  try {
+    const res = await axios.post(`/api/lx-sources/${id}/update`);
+    applyLxSources(res.data);
+    lxMessageTone.value = 'ok'; lxMessage.value = res.data.changed ? '音源已更新' : '已经是最新版本';
+  } catch (err) { lxMessageTone.value = 'warn'; lxMessage.value = lxError(err); }
+  finally { lxBusy.value = false; }
+}
+
+async function toggleLxUpdateAlerts(source: LxSourceItem, allow: boolean) {
+  try { applyLxSources((await axios.patch(`/api/lx-sources/${source.id}`, { allowUpdateAlerts: allow })).data); }
+  catch (err) { lxMessageTone.value = 'warn'; lxMessage.value = lxError(err); }
+}
+
+async function deleteLxSource(source: LxSourceItem) {
+  if (!confirm(`确认删除洛雪音源「${source.name}」？`)) return;
+  lxBusy.value = true;
+  try { applyLxSources((await axios.delete(`/api/lx-sources/${source.id}`)).data); }
+  catch (err) { lxMessageTone.value = 'warn'; lxMessage.value = lxError(err); }
+  finally { lxBusy.value = false; }
+}
 
 async function saveDefaultSource() {
   defaultSourceSaving.value = true;
@@ -1720,6 +1941,7 @@ async function loadIdleTimeout() {
     applyAdminGroupsFromServer(res.data.adminGroups);
     applySpotifyConfig(res.data.spotify);
     applyJellyfinConfig(res.data.jellyfin);
+    applyLxConfig(res.data.lxMusic);
     if (Array.isArray(res.data.enabledProviders)) {
       enabledProviders.value = res.data.enabledProviders;
       jellyfinEnabledForm.value = res.data.enabledProviders.includes('jellyfin');
@@ -2350,6 +2572,7 @@ onMounted(() => {
   loadQuality();
   loadIdleTimeout(); // also populates the Spotify config form (same endpoint)
   loadSpotifyStatus();
+  loadLxSources();
   handleSpotifyRedirect();
   if (session.isAdmin.value) {
     loadUsers();
@@ -2522,6 +2745,47 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-tertiary);
   &.logged { color: var(--color-online); }
+}
+
+.lx-icon { color: #62a9e8; }
+.lx-card { display: flex; flex-direction: column; gap: 14px; }
+.lx-enable-row { padding: 0 0 12px; }
+.lx-config-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr);
+  gap: 16px;
+  align-items: end;
+}
+.lx-fallback-toggle { padding: 8px 0; border: 0; }
+.lx-import-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.lx-import-row .input { min-width: 260px; }
+.lx-source-list { display: flex; flex-direction: column; gap: 10px; }
+.lx-source-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  &.active { border-color: var(--color-primary); background: var(--color-primary-10); }
+}
+.lx-source-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.lx-source-title { display: flex; align-items: center; gap: 8px; font-weight: 600; flex-wrap: wrap; }
+.lx-version { color: var(--text-tertiary); font-size: 12px; font-weight: 400; }
+.lx-active-badge { padding: 2px 7px; border-radius: 999px; background: var(--color-primary); color: white; font-size: 11px; }
+.lx-source-desc, .lx-source-meta, .lx-empty { color: var(--text-tertiary); font-size: 12px; }
+.lx-source-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+.lx-source-actions { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.lx-delete { color: #e26a6a; }
+.lx-update-alert { padding: 8px 10px; background: rgba(226, 166, 74, .12); border-radius: var(--radius-sm); color: #d3a44b; font-size: 12px; }
+.lx-update-alert a { margin-left: 8px; color: var(--color-primary); }
+.lx-alert-check { margin-top: 3px; }
+
+@media (max-width: 700px) {
+  .lx-config-grid { grid-template-columns: 1fr; }
+  .lx-source-item { flex-direction: column; }
+  .lx-source-actions { justify-content: flex-start; }
 }
 
 .login-methods {

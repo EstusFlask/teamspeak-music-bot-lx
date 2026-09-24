@@ -44,8 +44,10 @@ export function mapQqSongs(raw: any[] | null | undefined): Song[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((s) => {
     const albumMid = s.album?.mid ?? s.album?.pmid ?? s.albummid ?? s.albumMid ?? "";
+    const trackMid = String(s.mid ?? s.songmid ?? s.songMID ?? s.id ?? s.songid ?? s.songId ?? "");
+    const numericId = s.id ?? s.songid ?? s.songId;
     return {
-      id: String(s.mid ?? s.songmid ?? s.songMID ?? s.id ?? s.songid ?? s.songId ?? ""),
+      id: trackMid,
       name: s.title ?? s.name ?? s.songname ?? "",
       artist: (s.singer ?? s.singers ?? []).map((a: any) => a.name ?? a.title ?? "").filter(Boolean).join(" / "),
       album: s.album?.name ?? s.album?.title ?? s.albumname ?? "",
@@ -55,6 +57,11 @@ export function mapQqSongs(raw: any[] | null | undefined): Song[] {
         : "",
       platform: "qq" as const,
       vip: s.pay?.payplay === 1 || s.pay?.paytrackprice === 1 || false,
+      sourceMeta: {
+        strMediaMid: String(s.file?.media_mid ?? s.file?.mediaMid ?? s.strMediaMid ?? trackMid),
+        ...(numericId !== undefined ? { songId: Number(numericId) || String(numericId) } : {}),
+        ...(albumMid ? { albumId: String(albumMid) } : {}),
+      },
     };
   }).filter((s) => s.id);
 }
@@ -361,6 +368,11 @@ export class QQMusicProvider implements MusicProvider {
             ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${t.album.mid}.jpg`
             : "",
           platform: "qq",
+          sourceMeta: {
+            strMediaMid: String(t.file?.media_mid ?? t.file?.mediaMid ?? t.mid ?? songId),
+            ...(t.id !== undefined ? { songId: Number(t.id) || String(t.id) } : {}),
+            ...(t.album?.mid ? { albumId: String(t.album.mid) } : {}),
+          },
         };
       }
     } catch {
@@ -387,6 +399,7 @@ export class QQMusicProvider implements MusicProvider {
       duration: 0,
       coverUrl: "",
       platform: "qq",
+      sourceMeta: { strMediaMid: songId },
     };
   }
 
@@ -420,6 +433,11 @@ export class QQMusicProvider implements MusicProvider {
           ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg`
           : "",
         platform: "qq",
+        sourceMeta: {
+          strMediaMid: String(t.file?.media_mid ?? t.file?.mediaMid ?? t.mid ?? songId),
+          ...(t.id !== undefined ? { songId: Number(t.id) || String(t.id) } : {}),
+          ...(albumMid ? { albumId: String(albumMid) } : {}),
+        },
       };
     } catch {
       return null;

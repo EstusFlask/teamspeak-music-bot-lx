@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { BotManager } from "../../bot/manager.js";
-import type { BotConfig, GuestModeConfig, SpotifyConfig, JellyfinConfig, GateableProvider } from "../../data/config.js";
+import type { BotConfig, GuestModeConfig, SpotifyConfig, JellyfinConfig, GateableProvider, DefaultPlatform } from "../../data/config.js";
 import { saveConfig, GATEABLE_PROVIDERS } from "../../data/config.js";
 import type { Logger } from "../../logger.js";
 import type { BotDatabase } from "../../data/database.js";
@@ -79,6 +79,7 @@ export function createBotRouter(
       guestMode: config.guestMode,
       spotify: maskedSpotify(),
       jellyfin: maskedJellyfin(),
+      lxMusic: config.lxMusic,
       enabledProviders: config.enabledProviders,
       defaultPlatform: config.defaultPlatform,
     });
@@ -206,6 +207,17 @@ export function createBotRouter(
       if (typeof jf.userId === "string") t.userId = jf.userId;
     }
 
+    const lx = req.body?.lxMusic;
+    if (lx && typeof lx === "object") {
+      if (typeof lx.enabled === "boolean") config.lxMusic.enabled = lx.enabled;
+      if (lx.searchProvider === "netease" || lx.searchProvider === "qq" || lx.searchProvider === "kugou") {
+        config.lxMusic.searchProvider = lx.searchProvider;
+      }
+      if (typeof lx.fallbackToOfficial === "boolean") {
+        config.lxMusic.fallbackToOfficial = lx.fallbackToOfficial;
+      }
+    }
+
     // enabledProviders: full replace, known providers only (mirrors loadConfig).
     // An empty array is a valid "all gateable sources off". NOTE: the NetEase/QQ
     // sidecar API servers are only started at boot, so newly enabling those two
@@ -224,7 +236,12 @@ export function createBotRouter(
     //      keeping the persisted config consistent with loadConfig's invariant.
     //   2) Apply an explicit change — `null`/`""` clears it (back to priority
     //      order); a known+enabled provider sets it; anything else is ignored.
-    if (config.defaultPlatform && !config.enabledProviders.includes(config.defaultPlatform)) {
+    if (
+      config.defaultPlatform &&
+      (config.defaultPlatform === "lx"
+        ? !config.lxMusic.enabled
+        : !config.enabledProviders.includes(config.defaultPlatform))
+    ) {
       config.defaultPlatform = null;
     }
     if ("defaultPlatform" in req.body) {
@@ -233,10 +250,11 @@ export function createBotRouter(
         config.defaultPlatform = null;
       } else if (
         typeof dp === "string" &&
-        (GATEABLE_PROVIDERS as readonly string[]).includes(dp) &&
-        config.enabledProviders.includes(dp as GateableProvider)
+        ((dp === "lx" && config.lxMusic.enabled) ||
+          ((GATEABLE_PROVIDERS as readonly string[]).includes(dp) &&
+            config.enabledProviders.includes(dp as GateableProvider)))
       ) {
-        config.defaultPlatform = dp as GateableProvider;
+        config.defaultPlatform = dp as DefaultPlatform;
       }
     }
 
@@ -287,6 +305,7 @@ export function createBotRouter(
       guestMode: config.guestMode,
       spotify: maskedSpotify(),
       jellyfin: maskedJellyfin(),
+      lxMusic: config.lxMusic,
       enabledProviders: config.enabledProviders,
       defaultPlatform: config.defaultPlatform,
     });

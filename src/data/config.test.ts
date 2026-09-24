@@ -161,6 +161,31 @@ describe("config", () => {
     expect(getDefaultConfig().defaultPlatform).toBeNull();
   });
 
+  it("keeps LX opt-in and allows it as an explicit default only while enabled", () => {
+    const config = getDefaultConfig();
+    expect(config.lxMusic).toEqual({
+      enabled: false,
+      searchProvider: "netease",
+      fallbackToOfficial: true,
+    });
+    config.defaultPlatform = "lx";
+    expect(defaultPlatform(config)).toBe("netease");
+    config.lxMusic.enabled = true;
+    expect(defaultPlatform(config)).toBe("lx");
+  });
+
+  it("sanitizes LX settings and an LX default loaded from disk", () => {
+    const dir = makeTmpDir();
+    const path = join(dir, "lx.json");
+    writeFileSync(path, JSON.stringify({
+      lxMusic: { enabled: true, searchProvider: "qq", fallbackToOfficial: false },
+      defaultPlatform: "lx",
+    }));
+    const config = loadConfig(path);
+    expect(config.lxMusic).toEqual({ enabled: true, searchProvider: "qq", fallbackToOfficial: false });
+    expect(config.defaultPlatform).toBe("lx");
+  });
+
   it("defaultPlatform() honors an explicit, enabled preference over the priority order", () => {
     const config = getDefaultConfig();
     // Priority would pick netease; a Bilibili-loving server sets B站 instead (#126).

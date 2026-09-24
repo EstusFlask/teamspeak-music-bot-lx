@@ -684,6 +684,69 @@ describe("BotInstance.resolveAndPlay — Spotify routing (C4)", () => {
   });
 });
 
+describe("BotInstance.resolveAndPlay — LX custom-source routing", () => {
+  const neteaseSong = () => ({ ...spotifySong(), platform: "netease", id: "123" });
+
+  it("prefers an LX URL for supported native songs", async () => {
+    const controller = makeController();
+    const player = makePlayer();
+    const ctx = makeResolveCtx({ controller, player, url: "https://official.example/song.mp3" });
+    const official = vi.fn(async () => ({ url: "https://official.example/song.mp3" }));
+    ctx.getProviderFor = vi.fn(() => ({ getSongUrl: official, getQuality: () => "lossless" }));
+    ctx.config = { lxMusic: { enabled: true, fallbackToOfficial: true } };
+    ctx.lxSourceManager = {
+      canResolvePlatform: vi.fn(() => true),
+      resolve: vi.fn(async () => ({ url: "https://lx.example/song.flac" })),
+    };
+
+    const ok = await resolveAndPlay.call(ctx, neteaseSong());
+
+    expect(ok).toBe(true);
+    expect(ctx.lxSourceManager.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "123", platform: "netease" }),
+      "lossless",
+    );
+    expect(official).not.toHaveBeenCalled();
+    expect(player.play).toHaveBeenCalledWith("https://lx.example/song.flac", 0, 200);
+  });
+
+  it("falls back to the native provider when LX resolution fails", async () => {
+    const controller = makeController();
+    const player = makePlayer();
+    const ctx = makeResolveCtx({ controller, player, url: "https://official.example/song.mp3" });
+    const official = vi.fn(async () => ({ url: "https://official.example/song.mp3" }));
+    ctx.getProviderFor = vi.fn(() => ({ getSongUrl: official, getQuality: () => "exhigh" }));
+    ctx.config = { lxMusic: { enabled: true, fallbackToOfficial: true } };
+    ctx.lxSourceManager = {
+      canResolvePlatform: vi.fn(() => true),
+      resolve: vi.fn(async () => null),
+    };
+
+    const ok = await resolveAndPlay.call(ctx, neteaseSong());
+
+    expect(ok).toBe(true);
+    expect(official).toHaveBeenCalledWith("123");
+    expect(player.play).toHaveBeenCalledWith("https://official.example/song.mp3", 0, 200);
+  });
+
+  it("does not call the native provider when fallback is disabled", async () => {
+    const controller = makeController();
+    const player = makePlayer();
+    const ctx = makeResolveCtx({ controller, player, url: "https://official.example/song.mp3" });
+    const official = vi.fn(async () => ({ url: "https://official.example/song.mp3" }));
+    ctx.getProviderFor = vi.fn(() => ({ getSongUrl: official, getQuality: () => "exhigh" }));
+    ctx.config = { lxMusic: { enabled: true, fallbackToOfficial: false } };
+    ctx.lxSourceManager = {
+      canResolvePlatform: vi.fn(() => true),
+      resolve: vi.fn(async () => null),
+    };
+
+    await expect(resolveAndPlay.call(ctx, neteaseSong())).resolves.toBe(false);
+    expect(official).not.toHaveBeenCalled();
+    expect(player.play).not.toHaveBeenCalled();
+  });
+});
+
 describe("BotInstance.setupPlayerEvents — controller trackEnded wiring", () => {
   function makeEventCtx(currentPlatform: string) {
     return {

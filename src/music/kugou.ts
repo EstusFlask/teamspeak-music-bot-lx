@@ -217,8 +217,12 @@ function parseId(id: string): { hash: string; albumAudioId: string; albumId: str
 interface KugouRawSong {
   hash?: string;
   FileHash?: string;
+  HQFileHash?: string;
+  hqhash?: string;
   SQFileHash?: string;
   sqhash?: string;
+  ResFileHash?: string;
+  reshash?: string;
   album_audio_id?: number | string;
   album_id?: number | string;
   AlbumID?: number | string;
@@ -300,6 +304,12 @@ export function mapKugouSong(raw: KugouNestedTrack): Song {
     duration,
     coverUrl,
     platform: "kugou",
+    sourceMeta: {
+      hash128: hash,
+      hash320: String(raw.HQFileHash ?? raw.hqhash ?? hash).toLowerCase(),
+      hashFlac: String(raw.SQFileHash ?? raw.sqhash ?? hash).toLowerCase(),
+      hashFlac24: String(raw.ResFileHash ?? raw.reshash ?? raw.SQFileHash ?? raw.sqhash ?? hash).toLowerCase(),
+    },
   };
 }
 

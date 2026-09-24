@@ -16,6 +16,7 @@ import type { AvatarStore } from "../data/avatars.js";
 import type { PermissionStore } from "../data/permissions.js";
 import type { SpotifyOAuth } from "../music/spotify/spotify-oauth.js";
 import { ManagedVoiceClientRegistry } from "./managed-voice-clients.js";
+import type { LxSourceManager } from "../music/lx/manager.js";
 
 /**
  * Run bot.connect() with a hard deadline. If the handshake hangs (e.g. the
@@ -84,6 +85,7 @@ export class BotManager extends EventEmitter {
   private jellyfinProvider: MusicProvider;
   private spotifyDataDir: string;
   private readonly spotifyOAuth?: SpotifyOAuth;
+  private readonly lxSourceManager?: LxSourceManager;
   private database: BotDatabase;
   private config: BotConfig;
   private logger: Logger;
@@ -106,7 +108,8 @@ export class BotManager extends EventEmitter {
     spotifyProvider?: MusicProvider,
     spotifyDataDir?: string,
     spotifyOAuth?: SpotifyOAuth,
-    jellyfinProvider?: MusicProvider
+    jellyfinProvider?: MusicProvider,
+    lxSourceManager?: LxSourceManager
   ) {
     super();
     this.neteaseProvider = neteaseProvider;
@@ -119,6 +122,7 @@ export class BotManager extends EventEmitter {
     this.jellyfinProvider = jellyfinProvider ?? neteaseProvider;
     this.spotifyDataDir = spotifyDataDir ?? path.join(process.cwd(), "data", "spotify");
     this.spotifyOAuth = spotifyOAuth;
+    this.lxSourceManager = lxSourceManager;
     // Let the local provider see which uploads are still referenced by any
     // bot's queue, so it never deletes a file another queue/bot still needs.
     const referenceable = this.localProvider as Partial<{
@@ -166,6 +170,7 @@ export class BotManager extends EventEmitter {
       managedVoiceClients: this.managedVoiceClients,
       spotifyDataDir: this.spotifyDataDir,
       spotifyOAuth: this.spotifyOAuth,
+      lxSourceManager: this.lxSourceManager,
     });
 
     this.bots.set(id, bot);
@@ -311,6 +316,7 @@ export class BotManager extends EventEmitter {
         managedVoiceClients: this.managedVoiceClients,
         spotifyDataDir: this.spotifyDataDir,
         spotifyOAuth: this.spotifyOAuth,
+        lxSourceManager: this.lxSourceManager,
       });
       this.bots.set(id, bot);
       this.emit("botInstance", bot);
@@ -370,6 +376,7 @@ export class BotManager extends EventEmitter {
         managedVoiceClients: this.managedVoiceClients,
         spotifyDataDir: this.spotifyDataDir,
         spotifyOAuth: this.spotifyOAuth,
+        lxSourceManager: this.lxSourceManager,
       });
 
       this.bots.set(saved.id, bot);

@@ -45,6 +45,22 @@ describe("mapKugouSongs", () => {
     expect(songs[0].id).toBe("aa|1|2");
   });
 
+  it("retains quality-specific hashes for LX-compatible URL resolution", () => {
+    const song = mapKugouSong({
+      FileHash: "LOW",
+      HQFileHash: "HIGH",
+      SQFileHash: "LOSSLESS",
+      ResFileHash: "HIRES",
+      songname: "x",
+    });
+    expect(song.sourceMeta).toEqual({
+      hash128: "low",
+      hash320: "high",
+      hashFlac: "lossless",
+      hashFlac24: "hires",
+    });
+  });
+
   it("returns [] for non-array input", () => {
     expect(mapKugouSongs(undefined)).toEqual([]);
   });

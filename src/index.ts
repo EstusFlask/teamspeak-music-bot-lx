@@ -11,6 +11,7 @@ import { LocalMusicProvider } from "./music/local.js";
 import { KugouProvider } from "./music/kugou.js";
 import { JellyfinProvider } from "./music/jellyfin.js";
 import { SpotifyProvider } from "./music/spotify/provider.js";
+import { LxSourceManager } from "./music/lx/manager.js";
 import { SpotifyOAuth, createFileOAuthTokenStore } from "./music/spotify/spotify-oauth.js";
 import { createCookieStore } from "./music/auth.js";
 import { createAvatarStore } from "./data/avatars.js";
@@ -32,6 +33,7 @@ const COOKIE_DIR = path.join(DATA_DIR, "cookies");
 const AVATAR_DIR = path.join(DATA_DIR, "avatars");
 const LOCAL_AUDIO_DIR = path.join(DATA_DIR, "local-audio");
 const SPOTIFY_DATA_DIR = path.join(DATA_DIR, "spotify");
+const LX_SOURCE_DIR = path.join(DATA_DIR, "lx-sources");
 const STATIC_DIR = path.join(ROOT_DIR, "web", "dist");
 
 async function main() {
@@ -42,6 +44,7 @@ async function main() {
   saveConfig(CONFIG_PATH, config);
 
   const logger = createLogger(LOG_DIR);
+  const lxSourceManager = new LxSourceManager(LX_SOURCE_DIR, logger.child({ component: "lx-source" }));
 
   // Prevent unhandled errors from crashing the process
   process.on("uncaughtException", (err) => {
@@ -142,7 +145,8 @@ async function main() {
     spotifyProvider,
     SPOTIFY_DATA_DIR,
     spotifyOAuth,
-    jellyfinProvider
+    jellyfinProvider,
+    lxSourceManager
   );
   await botManager.loadSavedBots();
 
@@ -164,6 +168,7 @@ async function main() {
     cookieStore,
     staticDir: STATIC_DIR,
     spotifyOAuth,
+    lxSourceManager,
   });
   await webServer.start();
 
@@ -176,6 +181,7 @@ async function main() {
   const shutdown = () => {
     logger.info("Shutting down...");
     botManager.shutdown();
+    lxSourceManager.close();
     webServer.stop();
     apiServer.stop();
     db.close();

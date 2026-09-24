@@ -79,6 +79,7 @@ export function createMusicRouter(
   }
 
   function getProvider(platform?: string): MusicProvider {
+    if (platform === "lx" && config) return getProvider(config.lxMusic.searchProvider);
     if (platform === "bilibili") return bilibiliProvider;
     if (platform === "youtube") return youtubeProvider;
     if (platform === "local" && localProvider) return localProvider;
@@ -387,6 +388,7 @@ export function createMusicRouter(
   // reports enabled with the legacy netease default.
   router.get("/providers", (_req, res) => {
     const ALL_PLATFORMS = [
+      "lx",
       "jellyfin",
       "netease",
       "qq",

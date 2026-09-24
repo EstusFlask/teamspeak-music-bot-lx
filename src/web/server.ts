@@ -21,6 +21,8 @@ import { createAuditRouter } from "./api/audit.js";
 import { createFavoritesRouter } from "./api/favorites.js";
 import { createSavedQueuesRouter } from "./api/saved-queues.js";
 import { createSpotifyRouter } from "./api/spotify.js";
+import { createLxSourcesRouter } from "./api/lx-sources.js";
+import type { LxSourceManager } from "../music/lx/manager.js";
 import type { SpotifyOAuth } from "../music/spotify/spotify-oauth.js";
 import type { SpotifyProvider } from "../music/spotify/provider.js";
 import type { JellyfinProvider } from "../music/jellyfin.js";
@@ -62,6 +64,7 @@ export interface WebServerOptions {
   /** Process-wide shared Spotify OAuth (single account, Stage 3). When set, the
    *  /api/spotify {login,callback,status} router is mounted. */
   spotifyOAuth?: SpotifyOAuth;
+  lxSourceManager: LxSourceManager;
 }
 
 export interface WebServer {
@@ -94,7 +97,9 @@ export function createWebServer(options: WebServerOptions): WebServer {
     next();
   });
 
-  app.use(express.json({ limit: "400kb" }));
+  // LX custom-source imports are capped at 1 MiB by their manager. Leave a
+  // little JSON/base escaping headroom while still bounding every API body.
+  app.use(express.json({ limit: "1200kb" }));
   app.use(cookieParser());
 
   const users = createUserStore(options.database.db);
@@ -168,6 +173,7 @@ export function createWebServer(options: WebServerOptions): WebServer {
     "/api/music",
     createMusicRouter(options.neteaseProvider, options.qqProvider, options.bilibiliProvider, logger, options.localProvider, options.config, options.kugouProvider, options.spotifyProvider, options.jellyfinProvider, options.configPath)
   );
+  app.use("/api/lx-sources", createLxSourcesRouter(options.lxSourceManager, logger));
   app.use("/api/player", createPlayerRouter(
     options.botManager, logger, options.database,
     options.neteaseProvider, options.qqProvider, options.bilibiliProvider,

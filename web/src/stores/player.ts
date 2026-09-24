@@ -13,6 +13,7 @@ export interface Song {
   platform: 'netease' | 'qq' | 'bilibili' | 'youtube' | 'local' | 'kugou' | 'spotify' | 'jellyfin';
   requestedBy?: string;
   playedAt?: string;
+  sourceMeta?: Record<string, string | number | boolean | null | undefined>;
 }
 
 export type Source = 'jellyfin' | 'netease' | 'qq' | 'kugou' | 'spotify';

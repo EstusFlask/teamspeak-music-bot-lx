@@ -38,6 +38,15 @@ export interface JellyfinConfig {
   userId: string;
 }
 
+/** LX Music custom-source compatibility. LX scripts resolve playback URLs;
+ * search/playlist metadata still comes from one of the native providers. */
+export interface LxMusicConfig {
+  enabled: boolean;
+  searchProvider: "netease" | "qq" | "kugou";
+  /** When true, a failed/unsupported LX resolve falls back to the native API. */
+  fallbackToOfficial: boolean;
+}
+
 /**
  * Per-provider audio quality (音质), persisted so a restart keeps the user's
  * choice instead of resetting each provider to its in-memory default (#125).
@@ -74,11 +83,13 @@ export const GATEABLE_PROVIDERS = [
   "kugou",
 ] as const;
 export type GateableProvider = (typeof GATEABLE_PROVIDERS)[number];
+export type DefaultPlatform = GateableProvider | "lx";
 
 /** Whether a platform may be used for search/playback under the current config. */
 export function isProviderEnabled(config: BotConfig, platform: string): boolean {
   if (platform === "local") return config.localAudioEnabled !== false;
   if (platform === "spotify") return config.spotify.enabled;
+  if (platform === "lx") return config.lxMusic?.enabled === true;
   return config.enabledProviders.includes(platform as GateableProvider);
 }
 
@@ -98,9 +109,10 @@ export function isProviderEnabled(config: BotConfig, platform: string): boolean 
  * "netease" when nothing is enabled so callers always get a provider — the
  * enabled-gate then produces the friendly error.
  */
-export function defaultPlatform(config: BotConfig): GateableProvider {
+export function defaultPlatform(config: BotConfig): DefaultPlatform {
   const pref = config.defaultPlatform;
-  if (pref && config.enabledProviders.includes(pref)) return pref;
+  if (pref === "lx" && config.lxMusic?.enabled === true) return pref;
+  if (pref && pref !== "lx" && config.enabledProviders.includes(pref)) return pref;
   for (const p of ["netease", "qq", "kugou", "jellyfin", "bilibili", "youtube"] as const) {
     if (config.enabledProviders.includes(p)) return p;
   }
@@ -148,6 +160,7 @@ export interface BotConfig {
   guestMode: GuestModeConfig;
   spotify: SpotifyConfig;
   jellyfin: JellyfinConfig;
+  lxMusic: LxMusicConfig;
   /** Persisted per-provider audio quality (音质), restored on startup (#125). */
   audioQuality: AudioQualityConfig;
   /**
@@ -160,12 +173,11 @@ export interface BotConfig {
   enabledProviders: GateableProvider[];
   /**
    * Optional operator-chosen default source for commands/REST/WebUI calls that
-   * omit a platform (issue #126). When set to an enabled gateable provider it
-   * overrides the fixed priority order in defaultPlatform(); `null` (the default)
-   * keeps that priority order. loadConfig cleans stale/unknown/disabled values
-   * back to null.
+   * omit a platform (issue #126). An enabled gateable provider, or the virtual
+   * `lx` source while lxMusic is enabled, overrides the fixed priority order;
+   * `null` keeps that order. Stale/unknown/disabled values are cleaned to null.
    */
-  defaultPlatform: GateableProvider | null;
+  defaultPlatform: DefaultPlatform | null;
 }
 
 export function getDefaultConfig(): BotConfig {
@@ -223,6 +235,11 @@ export function getDefaultConfig(): BotConfig {
       password: "",
       apiKey: "",
       userId: "",
+    },
+    lxMusic: {
+      enabled: false,
+      searchProvider: "netease",
+      fallbackToOfficial: true,
     },
     // Mirrors each provider's own in-memory default quality; overwritten on
     // startup once the user has changed a quality (persisted via #125).
@@ -380,6 +397,16 @@ export function loadConfig(path: string): BotConfig {
       userId: typeof partialJf.userId === "string" ? partialJf.userId : defaults.jellyfin.userId,
     };
 
+    const partialLx = (partial.lxMusic ?? {}) as Partial<LxMusicConfig>;
+    const lxMusic: LxMusicConfig = {
+      enabled: partialLx.enabled === true,
+      searchProvider:
+        partialLx.searchProvider === "qq" || partialLx.searchProvider === "kugou"
+          ? partialLx.searchProvider
+          : defaults.lxMusic.searchProvider,
+      fallbackToOfficial: partialLx.fallbackToOfficial !== false,
+    };
+
     // enabledProviders → known providers only; a non-array falls back to the
     // default (online sources, jellyfin off). An explicitly-empty array is
     // respected (operator chose to disable every gateable source).
@@ -425,12 +452,14 @@ export function loadConfig(path: string): BotConfig {
     // anything else (unknown value, disabled source, wrong type, missing) becomes
     // null so defaultPlatform() falls back to the fixed priority order.
     const rawDefault = partial.defaultPlatform;
-    const defaultPlatformPref: GateableProvider | null =
-      typeof rawDefault === "string" &&
-      (GATEABLE_PROVIDERS as readonly string[]).includes(rawDefault) &&
-      enabledProviders.includes(rawDefault as GateableProvider)
-        ? (rawDefault as GateableProvider)
-        : null;
+    const defaultPlatformPref: DefaultPlatform | null =
+      rawDefault === "lx" && lxMusic.enabled
+        ? "lx"
+        : typeof rawDefault === "string" &&
+            (GATEABLE_PROVIDERS as readonly string[]).includes(rawDefault) &&
+            enabledProviders.includes(rawDefault as GateableProvider)
+          ? (rawDefault as GateableProvider)
+          : null;
 
     // audioQuality → per-provider strings; each field falls back to its default
     // when missing/blank/non-string (a hand-edited/legacy config must never smuggle
@@ -453,6 +482,7 @@ export function loadConfig(path: string): BotConfig {
       guestMode: gm,
       spotify,
       jellyfin,
+      lxMusic,
       audioQuality,
       enabledProviders,
       savedQueuesEnabled,

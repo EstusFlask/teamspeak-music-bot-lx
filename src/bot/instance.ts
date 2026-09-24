@@ -37,6 +37,7 @@ import path from "node:path";
 import { SpotifyController } from "../music/spotify/controller.js";
 import type { SpotifyTrackEndedEvent } from "../music/spotify/backend.js";
 import type { SpotifyOAuth } from "../music/spotify/spotify-oauth.js";
+import type { LxSourceManager } from "../music/lx/manager.js";
 import { VoiceDuckingController } from "./voice-ducking.js";
 import {
   ManagedVoiceClientRegistry,
@@ -119,6 +120,7 @@ export interface BotInstanceOptions {
   /** Process-wide shared Spotify OAuth (single account); injected into the
    *  SpotifyController so web-login authorization is visible to playback (C3.1). */
   spotifyOAuth?: SpotifyOAuth;
+  lxSourceManager?: LxSourceManager;
   /** Test seam: build a fake controller instead of a real go-librespot one. */
   spotifyControllerFactory?: (o: {
     config: SpotifyConfig;
@@ -171,6 +173,7 @@ export class BotInstance extends EventEmitter {
   private kugouProvider: MusicProvider;
   private spotifyProvider: MusicProvider;
   private jellyfinProvider: MusicProvider;
+  private lxSourceManager?: LxSourceManager;
   private database: BotDatabase;
   private config: BotConfig;
   private logger: Logger;
@@ -212,6 +215,7 @@ export class BotInstance extends EventEmitter {
     this.kugouProvider = options.kugouProvider ?? options.neteaseProvider;
     this.spotifyProvider = options.spotifyProvider ?? options.neteaseProvider;
     this.jellyfinProvider = options.jellyfinProvider ?? options.neteaseProvider;
+    this.lxSourceManager = options.lxSourceManager;
     this.database = options.database;
     this.config = options.config;
     this.logger = options.logger.child({ botId: this.id });
@@ -900,7 +904,7 @@ export class BotInstance extends EventEmitter {
   }
 
   /** Friendly gate for user-selected platforms (flags / URLs / REST params). */
-  assertProviderEnabled(platform: Platform): void {
+  assertProviderEnabled(platform: Platform | "lx"): void {
     if (!isProviderEnabled(this.config, platform)) {
       throw new Error(
         `音源未启用：${platform}（provider disabled — 需在配置 enabledProviders 中开启）`,
@@ -936,7 +940,7 @@ export class BotInstance extends EventEmitter {
     }
     const def = defaultPlatform(this.config);
     this.assertProviderEnabled(def);
-    return this.getProviderFor(def);
+    return this.getProviderFor(def === "lx" ? (this.config.lxMusic?.searchProvider ?? "netease") : def);
   }
 
   private requesterNameFromMessage(msg?: TS3TextMessage): string | undefined {
@@ -968,7 +972,18 @@ export class BotInstance extends EventEmitter {
     this.voteSkipUsers.clear();
     const provider = this.getProviderFor(song.platform);
     try {
-      const result = await provider.getSongUrl(song.id);
+      const lxEligible = this.config.lxMusic?.enabled === true && this.lxSourceManager?.canResolvePlatform(song.platform);
+      let result = null;
+      if (lxEligible) {
+        try {
+          result = await this.lxSourceManager!.resolve(song, provider.getQuality());
+        } catch (err) {
+          this.logger.warn({ err, songId: song.id, platform: song.platform }, "LX source URL resolve failed");
+        }
+      }
+      if (!result && (!lxEligible || this.config.lxMusic?.fallbackToOfficial !== false)) {
+        result = await provider.getSongUrl(song.id);
+      }
       if (!result?.url) {
         this.logger.warn({ songId: song.id, name: song.name }, "No URL available, skipping");
         return false;

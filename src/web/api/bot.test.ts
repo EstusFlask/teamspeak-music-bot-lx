@@ -751,6 +751,39 @@ describe("bot router /settings jellyfin block + enabledProviders", () => {
     expect(res.body.defaultPlatform).toBeNull();
   });
 
+  it("GET /settings exposes the safe default LX configuration", async () => {
+    const res = await request(mountBot()).get("/api/bot/settings");
+    expect(res.status).toBe(200);
+    expect(res.body.lxMusic).toEqual({
+      enabled: false,
+      searchProvider: "netease",
+      fallbackToOfficial: true,
+    });
+  });
+
+  it("POST /settings enables LX, validates its search provider, and permits an LX default", async () => {
+    const res = await request(mountBot()).post("/api/bot/settings").send({
+      lxMusic: { enabled: true, searchProvider: "qq", fallbackToOfficial: false },
+      defaultPlatform: "lx",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.lxMusic).toEqual({ enabled: true, searchProvider: "qq", fallbackToOfficial: false });
+    expect(res.body.defaultPlatform).toBe("lx");
+    const onDisk = JSON.parse(readFileSync(configPath, "utf-8"));
+    expect(onDisk.lxMusic.searchProvider).toBe("qq");
+    expect(onDisk.defaultPlatform).toBe("lx");
+  });
+
+  it("clears an LX default when LX is disabled", async () => {
+    config.lxMusic.enabled = true;
+    config.defaultPlatform = "lx";
+    const res = await request(mountBot()).post("/api/bot/settings").send({
+      lxMusic: { enabled: false },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.defaultPlatform).toBeNull();
+  });
+
   it("POST /settings sets an enabled defaultPlatform and persists it", async () => {
     const res = await request(mountBot()).post("/api/bot/settings").send({
       defaultPlatform: "bilibili",

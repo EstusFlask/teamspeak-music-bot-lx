@@ -32,6 +32,10 @@ describe("QQ adapter", () => {
         coverUrl: "https://y.gtimg.cn/music/photo_new/T002R300x300M000alb001.jpg",
         platform: "qq",
         vip: false,
+        sourceMeta: {
+          strMediaMid: "001abc",
+          albumId: "alb001",
+        },
       },
     ]);
   });

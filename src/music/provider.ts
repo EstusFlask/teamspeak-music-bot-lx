@@ -21,6 +21,9 @@ export interface Song {
   /** VIP / copyright-restricted: non-VIP users can only play a trial fragment
    *  (NetEase fee=1 VIP / fee=4 album-only, or QQ pay.payplay/paytrackprice=1). */
   vip?: boolean;
+  /** Provider-specific identifiers retained for compatible URL resolvers such
+   * as LX Music. Must remain JSON-serializable because queues are persisted. */
+  sourceMeta?: Record<string, string | number | boolean | null | undefined>;
 }
 
 export interface SongWithUrl extends Song {
