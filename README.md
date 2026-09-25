@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Node.js-20%20%7C%2022%20LTS-339933?logo=nodedotjs&logoColor=white" />
+  <img src="https://img.shields.io/badge/Node.js-22.12%2B-339933?logo=nodedotjs&logoColor=white" />
   <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white" />
   <img src="https://img.shields.io/badge/许可证-MIT-green" />
@@ -61,90 +61,87 @@
 
 ## 快速开始
 
-### 方式一：Windows 一键部署（最简单）
+### 方式一：Docker（Linux 服务器 / NAS / 宝塔推荐）
 
-先装好 Node.js，其余依赖（含内置 FFmpeg）全部自动安装。
-
-```
-1. 安装 Node.js 22 LTS（https://nodejs.org/ 或 https://nodejs.cn/）
-2. 下载或 clone 本项目
-3. 双击 scripts\setup.bat      （安装依赖并构建，不含 Node.js 本身）
-4. 双击 scripts\start.bat      （启动机器人）
-5. 浏览器打开 http://localhost:3000
-```
-
-> **先装 Node.js 22 LTS**（[nodejs.org](https://nodejs.org/) / 国内镜像 [nodejs.cn](https://nodejs.cn/)）。`setup.bat` 检测到没装 Node 时会给出下载地址并退出，不会替你安装。
->
-> 之后 `setup.bat` 会运行 `npm install` 安装所有依赖（包括内置 FFmpeg），按当前 Node 版本准备好原生模块，最后构建项目。之后每次只需双击 `start.bat` 启动。
->
-> **Node 20 已不再支持**：better-sqlite3 从 12.10.0 起不再发布它那个 ABI（115）的预编译包，装起来必须先备好 Python + C++ 构建工具（[#152](https://github.com/ZHANGTIANYAO1/teamspeak-music-bot/issues/152)）。Node 24 及更新的大版本能用，但 @discordjs/opus 0.10.0 同样没有 Node 24（ABI 137）的预编译包，安装脚本会改用源码编译，需要构建工具且耗时更久——所以推荐 22 LTS。**装好之后不要再换 Node 大版本**：原生模块只能在编译它的那个版本上加载，换版本后必须重新运行 `setup.bat`（脚本会自动检测并重装，见下方常见问题）。
-
-### 方式二：手动安装（所有系统）
-
-**前置条件：** [Node.js 22 LTS](https://nodejs.org/)（Node 24 及更新版本也能用，但需要源码编译原生模块；Node 20 已不再支持）和一个 TeamSpeak 服务器（TS3/TS5/TS6 均可）。
-FFmpeg **已自动内置**，无需手动安装。
+只需预先安装 Docker 和 Docker Compose；Node.js、FFmpeg、Opus 编码器都由镜像提供。本 fork 尚未发布独立的 GHCR 镜像，因此必须从当前源码本地构建，不能使用上游 `ghcr.io/zhangtianyao1/teamspeak-music-bot:latest`，否则不会包含洛雪音源功能。
 
 ```bash
-# 下载项目
-git clone https://github.com/ZHANGTIANYAO1/teamspeak-music-bot.git
-cd teamspeak-music-bot
-
-# 安装依赖
-npm install
-cd web && npm install && cd ..
-
-# 构建
-npm run build
-
-# 启动
-npm start
+git clone https://github.com/EstusFlask/teamspeak-music-bot-lx.git
+cd teamspeak-music-bot-lx
+docker compose -f scripts/docker/docker-compose.yml up -d --build
 ```
 
-打开浏览器访问 **http://localhost:3000**，按照设置向导完成配置。
-
-### 方式三：Docker 一键部署
-
-所有依赖已内置（Node.js、FFmpeg、Opus 编码器），无需安装任何额外软件。
-
-```bash
-git clone https://github.com/ZHANGTIANYAO1/teamspeak-music-bot.git
-cd teamspeak-music-bot/scripts/docker
-docker-compose up -d
-```
-
-打开浏览器访问 **http://localhost:3000**
+打开 **http://服务器地址:3000**，按照设置向导完成配置。
 
 <details>
 <summary>Docker 详细说明</summary>
 
-- 首次构建需要几分钟（编译原生模块）
-- 默认使用 `host` 网络模式，机器人可直接连接局域网 TS3 服务器
-- 数据持久化在 Docker 命名卷 `tsmusicbot-data` 中（数据库、Cookie、日志）
-- 内置健康检查（`/api/health`），支持 Docker 自动重启
+- 首次构建通常需要几分钟；后续只有依赖或源码变化时才会重建相应缓存层
+- 默认使用 `network_mode: host`，便于机器人连接宿主机或局域网内的 TeamSpeak 服务器
+- 数据持久化在 Compose 命名卷中（数据库、Cookie、日志和洛雪音源脚本），删除/重建容器不会丢失
+- 内置 `/api/health` 健康检查，并使用 `restart: unless-stopped`
+- host 网络不会在 Docker/宝塔的“端口映射”列显示 `3000:3000`；容器直接监听宿主机的 3000 端口，这是正常现象
 
 ```bash
-docker logs -f tsmusicbot          # 查看日志
-docker-compose down                # 停止
-docker-compose up -d --build       # 代码更新后重新构建
+docker logs -f tsmusicbot                                         # 查看日志
+docker compose -f scripts/docker/docker-compose.yml stop          # 停止
+docker compose -f scripts/docker/docker-compose.yml start         # 重新启动
+docker compose -f scripts/docker/docker-compose.yml up -d --build # 更新后重建
 ```
 
-如果 TS3 服务器在其他机器上，编辑 `docker-compose.yml`：
+如果不需要访问宿主机网络，也可以把 `network_mode: host` 注释掉并启用端口映射（两者不能同时使用）：
+
 ```yaml
-# 将 network_mode: host 替换为：
 ports:
   - "3000:3000"
 ```
 
 </details>
 
-### 方式四：Linux 一键安装
+### 方式二：Windows 一键部署
 
-```bash
-chmod +x scripts/install.sh
-sudo ./scripts/install.sh
+先安装 [Node.js 22 LTS](https://nodejs.org/)（最低 `22.12.0`），然后：
+
+```text
+1. git clone https://github.com/EstusFlask/teamspeak-music-bot-lx.git
+2. 进入 teamspeak-music-bot-lx，双击 scripts\setup.bat
+3. 安装和构建成功后，双击根目录 start.bat（或 scripts\start.bat）
+4. 浏览器打开 http://localhost:3000
 ```
 
-自动安装 Node.js 和依赖，配置 systemd 服务，支持开机自启。
+`setup.bat` 会安装前后端依赖、按当前 Node ABI 准备原生模块并构建项目。以后正常启动只需运行 `start.bat`；更新代码或更换 Node 大版本后，请重新运行 `setup.bat`。
+
+> Node 20 已不再支持。Node 24 及更新版本可以使用，但 Opus 等原生模块可能需要 Visual Studio Build Tools 和 Python 从源码编译，因此仍推荐 Node 22 LTS。FFmpeg 会随依赖安装，无需另装。
+
+### 方式三：Linux / macOS 源码安装
+
+前置条件是 Node.js `22.12.0+`、npm、Git；如果没有匹配的原生预编译包，还需要 C/C++ 编译工具和 Python 3。
+
+```bash
+git clone https://github.com/EstusFlask/teamspeak-music-bot-lx.git
+cd teamspeak-music-bot-lx
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+npm start
+```
+
+Linux 可安装 `build-essential python3`（Debian/Ubuntu）或对应发行版的开发工具；macOS 可安装 Xcode Command Line Tools。安装脚本会优先准备内置 FFmpeg，系统已有 `ffmpeg` 时也可作为回退。
+
+生产环境建议使用 systemd、Supervisor 或宝塔进程守护管理 `node dist/index.js`，工作目录必须是仓库根目录。服务启动后访问 **http://服务器地址:3000**。
+
+### 方式四：手动安装（适合排查安装脚本）
+
+```bash
+git clone https://github.com/EstusFlask/teamspeak-music-bot-lx.git
+cd teamspeak-music-bot-lx
+npm install --ignore-scripts
+node scripts/download-binaries.mjs
+cd web && npm install && cd ..
+npm run build
+npm start
+```
+
+手动安装同样要求 Node.js `22.12.0+`。`download-binaries.mjs` 会校验/下载当前 Node ABI 对应的原生模块；不要省略这一步。
 
 ## 更新升级
 
@@ -252,10 +249,10 @@ sqlite3 data/tsmusicbot.db "UPDATE users SET passwordHash='<paste-hash-here>' WH
 ### Windows 用户
 
 ```
-1. 双击 scripts\stop.bat 停止运行中的机器人（或手动关闭窗口）
+1. 在机器人窗口按 Ctrl+C 停止（或关闭该窗口）
 2. 在项目目录打开命令行，执行 git pull
 3. 双击 scripts\setup.bat 重新安装依赖并构建
-4. 双击 scripts\start.bat 启动
+4. 双击根目录 start.bat（或 scripts\start.bat）启动
 ```
 
 ### 手动安装用户（所有系统）
@@ -280,13 +277,11 @@ npm start
 ### Docker 用户
 
 ```bash
-cd scripts/docker
-
 # 拉取最新代码
 git pull
 
 # 重新构建并启动（数据自动保留）
-docker-compose up -d --build
+docker compose -f scripts/docker/docker-compose.yml up -d --build
 ```
 
 > 数据（数据库、Cookie、日志）保存在 Docker 命名卷 `tsmusicbot-data` 中，更新不会丢失。
@@ -300,10 +295,8 @@ sudo systemctl stop tsmusicbot
 # 拉取最新代码
 git pull
 
-# 重新安装依赖并构建
-npm install
-cd web && npm install && cd ..
-npm run build
+# 重新安装依赖并构建（脚本会检查当前 Node ABI）
+./scripts/setup.sh
 
 # 重新启动服务
 sudo systemctl start tsmusicbot
