@@ -2,7 +2,15 @@
   <img src="https://img.shields.io/badge/TeamSpeak-音乐机器人-blue?style=for-the-badge&logo=teamspeak" alt="TSMusicBot" />
 </p>
 
-<h1 align="center">TSMusicBot</h1>
+<h1 align="center">TSMusicBot LX</h1>
+
+## 本 fork：洛雪 LX 自定义音源
+
+基于 [ZHANGTIANYAO1/teamspeak-music-bot](https://github.com/ZHANGTIANYAO1/teamspeak-music-bot)，本分支加入洛雪 LX 自定义音源的导入、选择、更新与播放链接解析，并在 WebUI 设置页提供管理入口。歌曲元数据仍由原生平台获取，LX 音源用于可选的播放地址解析。
+
+This fork adds optional LX custom music-source management and playback URL resolution to the upstream TeamSpeak music bot. Native providers still supply metadata. Build the local Docker image described below to include these changes; an upstream image will not automatically include them.
+
+完整部署与配置说明保留在下方，洛雪部分见 [可选：洛雪自定义源](#可选洛雪自定义源)。
 
 <p align="center">
   <strong>TeamSpeak 音乐机器人</strong> — 网易云音乐 + QQ 音乐 + 酷狗音乐 + 哔哩哔哩 + YouTube（可选），Jellyfin / Spotify 可选启用，YesPlayMusic 风格 WebUI 控制面板
